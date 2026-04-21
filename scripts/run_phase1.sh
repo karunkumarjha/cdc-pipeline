@@ -128,12 +128,21 @@ if ! docker ps >/dev/null 2>&1; then
   die "docker daemon not reachable as '$USER' — open a new shell and re-run"
 fi
 
-# ---------- 5. repo ----------
-log "5/9 Cloning / updating repo at $REPO_DIR"
+# ---------- 5. fresh-start cleanup + repo ----------
+log "5/9 Tearing down any previous stack and cloning repo at $REPO_DIR"
+# If a previous compose stack is still running, stop it and wipe the
+# kafka-data volume so Kafka starts with a clean cluster ID + log dir.
+if [[ -f "$REPO_DIR/infra/docker-compose.yml" ]]; then
+  (cd "$REPO_DIR/infra" && docker compose down -v --remove-orphans >/dev/null 2>&1 || true)
+fi
+# Drop any orphan kafka-data volume from earlier attempts.
+docker volume rm -f $(docker volume ls -q | grep -E '(^|_)kafka-data$' || true) >/dev/null 2>&1 || true
+
 if [[ -d "$REPO_DIR/.git" ]]; then
   git -C "$REPO_DIR" fetch --quiet origin
   git -C "$REPO_DIR" reset --hard --quiet origin/main
 else
+  rm -rf "$REPO_DIR"
   git clone --quiet "$REPO_URL" "$REPO_DIR"
 fi
 cp "$ENV_SRC" "$REPO_DIR/.env"
@@ -142,6 +151,18 @@ ok "repo ready"
 
 cd "$REPO_DIR"
 set -a; . "$REPO_DIR/.env"; set +a
+
+# Drop any orphan Debezium replication slot from a prior run — otherwise
+# the new Debezium task refuses to create a slot with the same name or
+# resumes from a stale LSN.
+log "   dropping stale Debezium replication slot if present"
+PGPASSWORD="$PG_PASSWORD" psql \
+  "host=$PG_HOST user=postgres dbname=$PG_DATABASE port=${PG_PORT:-5432} sslmode=require" \
+  -v ON_ERROR_STOP=1 -At <<'SQL' >/dev/null
+SELECT pg_drop_replication_slot('debezium_slot')
+  WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name='debezium_slot');
+SQL
+ok "slot clean"
 
 # ---------- 6. debezium role + migrations ----------
 log "6/9 Creating debezium Postgres role (idempotent)"
