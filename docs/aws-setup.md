@@ -102,6 +102,13 @@ sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
+# Docker buildx plugin — Compose v2's `--build` requires buildx ≥ 0.17,
+# and AL2023's `docker` package doesn't ship one new enough.
+BUILDX_VERSION=v0.19.0
+sudo curl -sSL -o /usr/local/lib/docker/cli-plugins/docker-buildx \
+  "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64"
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+
 # uv for the Python script
 curl -LsSf https://astral.sh/uv/install.sh | sh
 . ~/.bashrc
