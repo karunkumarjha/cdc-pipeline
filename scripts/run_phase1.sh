@@ -166,20 +166,21 @@ ok "slot clean"
 
 # ---------- 6. debezium role + migrations ----------
 log "6/9 Creating debezium Postgres role (idempotent)"
-PGPASSWORD="$PG_PASSWORD" psql \
-  "host=$PG_HOST user=postgres dbname=$PG_DATABASE port=${PG_PORT:-5432} sslmode=require" \
-  -v ON_ERROR_STOP=1 \
-  -v dbz_pwd="$DEBEZIUM_PG_PASSWORD" <<'SQL'
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'debezium') THEN
-    EXECUTE format('CREATE ROLE debezium WITH LOGIN PASSWORD %L', :'dbz_pwd');
-  ELSE
-    EXECUTE format('ALTER ROLE debezium WITH LOGIN PASSWORD %L', :'dbz_pwd');
-  END IF;
-END $$;
-GRANT rds_replication TO debezium;
-SQL
+PG_CONN="host=$PG_HOST user=postgres dbname=$PG_DATABASE port=${PG_PORT:-5432} sslmode=require"
+
+# psql's :'var' substitution doesn't work inside DO blocks, so do the
+# "create-or-alter" check in the shell and run each statement as plain SQL.
+role_exists=$(PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" \
+  -v ON_ERROR_STOP=1 -At -c "SELECT 1 FROM pg_roles WHERE rolname='debezium';")
+if [[ "$role_exists" == "1" ]]; then
+  role_stmt="ALTER ROLE debezium WITH LOGIN PASSWORD :'pwd';"
+else
+  role_stmt="CREATE ROLE debezium WITH LOGIN PASSWORD :'pwd';"
+fi
+PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" -v ON_ERROR_STOP=1 \
+  -v pwd="$DEBEZIUM_PG_PASSWORD" -c "$role_stmt" >/dev/null
+PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" -v ON_ERROR_STOP=1 \
+  -c "GRANT rds_replication TO debezium;" >/dev/null
 ok "debezium role present with rds_replication"
 
 log "   applying SQL migrations"
