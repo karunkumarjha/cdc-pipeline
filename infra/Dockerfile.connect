@@ -1,6 +1,6 @@
 # Debezium Connect (brings Debezium Postgres source + standard Kafka Connect)
 # + Confluent S3 Sink connector plugin.
-FROM debezium/connect:2.7
+FROM debezium/connect:2.7.3.Final
 
 USER root
 
