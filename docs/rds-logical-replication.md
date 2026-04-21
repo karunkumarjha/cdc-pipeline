@@ -18,21 +18,30 @@ Done as part of [`aws-setup.md`](./aws-setup.md) step 2. Recap:
 
 ## 2. Create the `debezium` role (one-time, manual)
 
-Kept out of the automated migrations so the password never lands in git. On
-EC2, connect as the RDS master user:
+Kept out of the automated migrations so the password never lands in git.
+On RDS the master user `postgres` does **not** have the `REPLICATION`
+attribute and so cannot directly create roles with `WITH REPLICATION`.
+Instead, grant the built-in `rds_replication` role — that's the RDS
+equivalent and is what enables logical decoding for this user.
 
 ```bash
-psql "host=$PG_HOST port=5432 dbname=$PG_DATABASE user=postgres password=<master-pw>"
+# On EC2, with .env already sourced
+psql "host=$PG_HOST user=postgres dbname=$PG_DATABASE" -v ON_ERROR_STOP=1 <<SQL
+CREATE ROLE debezium WITH LOGIN PASSWORD '$DEBEZIUM_PG_PASSWORD';
+GRANT rds_replication TO debezium;
+SQL
 ```
 
-Then:
+Verify the membership:
 
-```sql
-CREATE ROLE debezium WITH LOGIN REPLICATION PASSWORD '<your-debezium-password>';
+```bash
+psql "host=$PG_HOST user=postgres dbname=$PG_DATABASE" -c "\du debezium"
+# Expect: "Member of: {rds_replication}"
 ```
 
-Put the same password into `~/cdc_pipeline/.env` as `DEBEZIUM_PG_PASSWORD` —
-that's what Kafka Connect will read at container start.
+`DEBEZIUM_PG_PASSWORD` is already in `.env` (Kafka Connect reads it at
+container start); the shell expands it into the SQL above so the
+password itself never lands on disk.
 
 ## 3. Apply migrations (publication + grants + app table)
 
