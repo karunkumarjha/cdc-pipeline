@@ -61,13 +61,14 @@ S3 PUT requests cost money; the free tier allows 2,000 PUTs/month. The sink
 flushes when **whichever of these fires first**:
 
 - `flush.size = 50` — accumulate 50 records per topic-partition, or
-- `rotate.interval.ms = 300000` (5 min) — close whatever partial file is open.
+- `rotate.interval.ms = 60000` (1 min) — close whatever partial file is open.
 
 Phase 1 only writes ~10 records per manual run, so `flush.size` is effectively
-dormant and the 5-minute rotation is what actually produces files. Net effect:
-you pay one PUT per ≤5-minute window in which there was activity, files stay
-small and human-readable, and you won't accidentally blow the PUT budget.
-Tighten `rotate.interval.ms` if you want to see files faster during demos.
+dormant and the 1-minute rotation is what actually produces files. Net effect:
+you pay at most one PUT per minute-window in which there was activity. At one
+manual ingestion per hour that's ~720 PUTs/month, comfortably under the 2,000
+free-tier cap. Raise `rotate.interval.ms` if you automate the script at a
+higher cadence.
 
 ### Dead-letter queues
 

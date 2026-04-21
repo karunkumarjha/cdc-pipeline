@@ -48,7 +48,7 @@ when CMC returns a coin we haven't seen before).
 
 ### S3
 
-Wait up to `rotate.interval.ms` (5 min):
+Wait up to `rotate.interval.ms` (1 min):
 
 ```bash
 aws s3 ls "s3://$S3_BUCKET/topics/cdc.public.cryptocurrencies/" --recursive
@@ -92,8 +92,8 @@ Check at least weekly via **Billing → Free tier** in the AWS Console:
 - **RDS**: 750 hours/month covers one db.t3.micro. Don't run a second one.
 - **EC2**: 750 hours/month covers one t3.micro.
 - **S3**: 5 GB storage, 2,000 PUTs/month, 20,000 GETs/month. With `flush.size=50`
-  and 5-minute rotation, a single run produces 1 PUT; a full month of hourly
-  runs stays comfortably under 750 PUTs.
+  and 1-minute rotation, a single run produces 1 PUT; a full month of hourly
+  runs is ~720 PUTs, still well under the cap.
 - **CMC**: 10,000 credits/month; `listings/latest` is 1 credit/call.
 - **Data transfer**: zero as long as RDS + EC2 + S3 live in the same region.
 

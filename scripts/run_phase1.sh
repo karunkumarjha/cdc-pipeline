@@ -22,7 +22,7 @@
 #   6. build & start Kafka + Kafka Connect via docker compose
 #   7. register both connectors via PUT /config (idempotent)
 #   8. run the ingestion script once
-#   9. wait up to 6 min for the S3 sink to flush, then list the objects
+#   9. wait up to 2 min for the S3 sink to flush, then list the objects
 
 set -Eeuo pipefail
 
@@ -234,8 +234,8 @@ rows=$(PGPASSWORD="$PG_PASSWORD" psql \
   -At -c "SELECT COUNT(*) FROM cryptocurrencies;")
 ok "cryptocurrencies rows in Postgres: $rows"
 
-log "   waiting up to 6 min for the S3 sink to flush (rotate.interval.ms=5min)"
-deadline=$(( $(date +%s) + 360 ))
+log "   waiting up to 2 min for the S3 sink to flush (rotate.interval.ms=1min)"
+deadline=$(( $(date +%s) + 120 ))
 while [[ "$(date +%s)" -lt "$deadline" ]]; do
   listing=$(aws s3 ls "s3://$S3_BUCKET/topics/cdc.public.cryptocurrencies/" --recursive 2>/dev/null || true)
   if echo "$listing" | grep -q '\.json$'; then
@@ -251,7 +251,7 @@ while [[ "$(date +%s)" -lt "$deadline" ]]; do
     exit 0
   fi
   printf "."
-  sleep 30
+  sleep 10
 done
 
 warn "No S3 objects after 6 min — flush hasn't fired yet."
