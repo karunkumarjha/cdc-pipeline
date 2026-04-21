@@ -34,7 +34,7 @@ def _get(url: str, headers: dict[str, str], params: dict[str, Any]) -> dict[str,
     return response.json()
 
 
-def fetch_listings(api_key: str, limit: int = 20) -> list[dict[str, Any]]:
+def fetch_listings(api_key: str, limit: int = 10) -> list[dict[str, Any]]:
     payload = _get(
         LISTINGS_URL,
         headers={"X-CMC_PRO_API_KEY": api_key, "Accept": "application/json"},

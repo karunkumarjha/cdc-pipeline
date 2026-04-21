@@ -12,7 +12,7 @@ class Settings:
     pg_database: str
     pg_user: str
     pg_password: str
-    cmc_limit: int = 20
+    cmc_limit: int = 10
 
     @property
     def pg_dsn(self) -> str:
@@ -38,5 +38,5 @@ def load_settings() -> Settings:
         pg_database=_require("PG_DATABASE"),
         pg_user=_require("PG_USER"),
         pg_password=_require("PG_PASSWORD"),
-        cmc_limit=int(os.environ.get("CMC_LIMIT", "20")),
+        cmc_limit=int(os.environ.get("CMC_LIMIT", "10")),
     )

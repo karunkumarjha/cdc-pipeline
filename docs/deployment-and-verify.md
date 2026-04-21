@@ -20,8 +20,8 @@ uv run python -m cdc_pipeline.main
 Expected output:
 
 ```
-INFO cdc_pipeline.cmc_client: Fetched 20 coins from CMC
-INFO cdc_pipeline.db: Upserted 20 rows into cryptocurrencies
+INFO cdc_pipeline.cmc_client: Fetched 10 coins from CMC
+INFO cdc_pipeline.db: Upserted 10 rows into cryptocurrencies
 ```
 
 ## Verify end-to-end
@@ -69,8 +69,8 @@ Each line is a Debezium envelope: `{"before": ..., "after": {...}, "op": "u", "t
 uv run python -m cdc_pipeline.main
 ```
 
-Prices will have shifted by a few cents; Debezium should emit ~20 `op=u` events.
-Confirm by re-running the `kafka-console-consumer` command with `--max-messages 25`
+Prices will have shifted by a few cents; Debezium should emit ~10 `op=u` events.
+Confirm by re-running the `kafka-console-consumer` command with `--max-messages 15`
 or by watching new S3 objects appear after the next rotation.
 
 ## Troubleshooting

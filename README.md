@@ -7,7 +7,7 @@ Coin Market Cap API  →  Python  →  RDS Postgres  →  Debezium  →  Kafka  
 ```
 
 All components run on a single free-tier EC2 instance. A manual `uv run` of
-the ingestion script upserts the top 20 cryptocurrencies into Postgres;
+the ingestion script upserts the top 10 cryptocurrencies into Postgres;
 Debezium streams the resulting WAL events through Kafka and out to S3 as
 raw JSON, five-minute-batched.
 

@@ -63,7 +63,7 @@ flushes when **whichever of these fires first**:
 - `flush.size = 50` — accumulate 50 records per topic-partition, or
 - `rotate.interval.ms = 300000` (5 min) — close whatever partial file is open.
 
-Phase 1 only writes ~20 records per manual run, so `flush.size` is effectively
+Phase 1 only writes ~10 records per manual run, so `flush.size` is effectively
 dormant and the 5-minute rotation is what actually produces files. Net effect:
 you pay one PUT per ≤5-minute window in which there was activity, files stay
 small and human-readable, and you won't accidentally blow the PUT budget.
