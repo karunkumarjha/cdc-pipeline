@@ -168,17 +168,22 @@ ok "slot clean"
 log "6/9 Creating debezium Postgres role (idempotent)"
 PG_CONN="host=$PG_HOST user=postgres dbname=$PG_DATABASE port=${PG_PORT:-5432} sslmode=require"
 
-# psql's :'var' substitution doesn't work inside DO blocks, so do the
-# "create-or-alter" check in the shell and run each statement as plain SQL.
+# psql's :'var' substitution only works on stdin/file input, not -c, so
+# pipe the CREATE/ALTER through a heredoc. Single-quoted <<'SQL' prevents
+# the shell from expanding :'pwd' before psql sees it.
 role_exists=$(PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" \
   -v ON_ERROR_STOP=1 -At -c "SELECT 1 FROM pg_roles WHERE rolname='debezium';")
 if [[ "$role_exists" == "1" ]]; then
-  role_stmt="ALTER ROLE debezium WITH LOGIN PASSWORD :'pwd';"
+  PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" -v ON_ERROR_STOP=1 \
+    -v pwd="$DEBEZIUM_PG_PASSWORD" <<'SQL' >/dev/null
+ALTER ROLE debezium WITH LOGIN PASSWORD :'pwd';
+SQL
 else
-  role_stmt="CREATE ROLE debezium WITH LOGIN PASSWORD :'pwd';"
+  PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" -v ON_ERROR_STOP=1 \
+    -v pwd="$DEBEZIUM_PG_PASSWORD" <<'SQL' >/dev/null
+CREATE ROLE debezium WITH LOGIN PASSWORD :'pwd';
+SQL
 fi
-PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" -v ON_ERROR_STOP=1 \
-  -v pwd="$DEBEZIUM_PG_PASSWORD" -c "$role_stmt" >/dev/null
 PGPASSWORD="$PG_PASSWORD" psql "$PG_CONN" -v ON_ERROR_STOP=1 \
   -c "GRANT rds_replication TO debezium;" >/dev/null
 ok "debezium role present with rds_replication"
