@@ -4,8 +4,14 @@ FROM debezium/connect:2.7.3.Final
 
 USER root
 
-# Install the Confluent S3 Sink connector into the standard Connect plugin path.
-# `confluent-hub` ships with the Debezium Connect image.
-RUN confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest
+# The Debezium Connect image doesn't ship the `confluent-hub` CLI, so we
+# pull it from Confluent's public tarball and install the S3 sink into
+# the standard Connect plugin path (/kafka/connect).
+RUN mkdir -p /opt/confluent-hub-client \
+ && curl -fsSL https://client.hub.confluent.io/confluent-hub-client-latest.tar.gz \
+    | tar -xz -C /opt/confluent-hub-client \
+ && ln -sf /opt/confluent-hub-client/bin/confluent-hub /usr/local/bin/confluent-hub \
+ && confluent-hub install --no-prompt --component-dir /kafka/connect \
+    confluentinc/kafka-connect-s3:latest
 
 USER kafka
