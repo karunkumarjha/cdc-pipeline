@@ -1,0 +1,11 @@
+# Debezium Connect (brings Debezium Postgres source + standard Kafka Connect)
+# + Confluent S3 Sink connector plugin.
+FROM debezium/connect:2.7
+
+USER root
+
+# Install the Confluent S3 Sink connector into the standard Connect plugin path.
+# `confluent-hub` ships with the Debezium Connect image.
+RUN confluent-hub install --no-prompt confluentinc/kafka-connect-s3:latest
+
+USER kafka

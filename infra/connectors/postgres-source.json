@@ -1,0 +1,28 @@
+{
+  "name": "cmc-postgres-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "plugin.name": "pgoutput",
+    "database.hostname": "${env:PG_HOST}",
+    "database.port": "${env:PG_PORT}",
+    "database.user": "debezium",
+    "database.password": "${env:DEBEZIUM_PG_PASSWORD}",
+    "database.dbname": "${env:PG_DATABASE}",
+    "topic.prefix": "cdc",
+    "table.include.list": "public.cryptocurrencies",
+    "publication.name": "dbz_pub",
+    "publication.autocreate.mode": "disabled",
+    "slot.name": "debezium_slot",
+    "snapshot.mode": "initial",
+    "tombstones.on.delete": "false",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "dlq.cdc.cryptocurrencies",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true"
+  }
+}
