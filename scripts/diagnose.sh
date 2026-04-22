@@ -40,12 +40,24 @@ fail()     { SECTION_RESULTS[$CUR_IDX]="FAIL"; SECTION_NOTES[$CUR_IDX]="$*"; pri
 
 # ────────────────────────────────────────────────────────────────────
 section "1. Environment (.env)"
-checking "reading $REPO_DIR/.env and required variables"
-if [[ -f .env ]]; then
-  set -a; . .env; set +a
-  show ".env sourced from $REPO_DIR/.env"
+# run_phase1.sh keeps the source-of-truth env at $HOME/.cdc-env and copies
+# it into the repo as .env on each run. If the in-repo copy is missing
+# (fresh clone, git clean, etc.) fall back to $HOME/.cdc-env.
+ENV_CANDIDATES=( "$REPO_DIR/.env" "$HOME/.cdc-env" )
+ENV_FILE=""
+for cand in "${ENV_CANDIDATES[@]}"; do
+  if [[ -f "$cand" ]]; then
+    ENV_FILE="$cand"
+    break
+  fi
+done
+
+checking "locating env file among: ${ENV_CANDIDATES[*]}"
+if [[ -n "$ENV_FILE" ]]; then
+  set -a; . "$ENV_FILE"; set +a
+  show "env sourced from $ENV_FILE"
 else
-  fail ".env not found at $REPO_DIR/.env — script cannot continue"
+  fail "no env file found — looked at: ${ENV_CANDIDATES[*]}"
   exit 1
 fi
 
