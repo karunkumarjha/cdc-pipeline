@@ -1,13 +1,25 @@
-# Python-generated files
+# Secrets
+.env
+*.pem
+
+# Python
 __pycache__/
-*.py[oc]
+*.py[co]
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
-# Virtual environments
-.venv
+# Virtual envs / tooling caches
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
 
-# Secrets
-.env
+# Editor / OS cruft
+.idea/
+.vscode/
+.DS_Store
+
+# Local Claude Code settings
+.claude/

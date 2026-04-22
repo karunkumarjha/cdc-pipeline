@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cdc-pipeline = "cdc_pipeline.main:main"
+cdc-pipeline = "cdc_pipeline.main:cli"
 
 [build-system]
 requires = ["hatchling"]

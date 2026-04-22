@@ -1,3 +1,4 @@
+"""Entrypoint: fetch CMC listings, upsert into Postgres, exit."""
 import logging
 import sys
 
@@ -25,5 +26,10 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    """Console-script entrypoint registered in pyproject.toml."""
     sys.exit(main())
+
+
+if __name__ == "__main__":
+    cli()

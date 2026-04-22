@@ -1,3 +1,4 @@
+"""Coin Market Cap listings client with bounded retries."""
 import logging
 from datetime import datetime, timezone
 from typing import Any

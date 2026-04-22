@@ -1,3 +1,4 @@
+"""Postgres connection pool + upsert for the cryptocurrencies table."""
 import logging
 from contextlib import contextmanager
 from typing import Any, Iterator

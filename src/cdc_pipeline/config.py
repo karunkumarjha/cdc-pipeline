@@ -1,3 +1,4 @@
+"""Typed settings loaded from environment (with .env support)."""
 import os
 from dataclasses import dataclass
 
