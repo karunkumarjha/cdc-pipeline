@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+# Your public IP in CIDR form. Find it with: curl -s https://checkip.amazonaws.com
+my_ip_cidr = "1.2.3.4/32"
+
+# RDS master password (>= 12 chars). This is the PG_PASSWORD your .cdc-env uses.
+db_master_password = "change-me-to-something-strong"
+
+# Optional overrides — defaults are fine for Phase 1.
+# aws_region        = "us-east-1"
+# ec2_instance_type = "t3.micro"
+# db_instance_class = "db.t3.micro"
+# db_engine_version = "16.4"
+# public_key_path   = "~/.ssh/cdc-pipeline.pub"

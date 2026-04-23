@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot bootstrap for Phase 1 on a fresh (or wiped) EC2 instance.
+# One-shot bootstrap for the CDC pipeline on a fresh (or wiped) EC2 instance.
 # From zero → CMC rows in S3 as JSON, with no manual steps.
 #
 # Prerequisites on the EC2:
@@ -10,8 +10,8 @@
 #     See the template printed below if the file is missing.
 #
 # Usage:
-#   bash run_phase1.sh                # uses $HOME/.cdc-env
-#   bash run_phase1.sh /path/to/env   # uses the path you pass
+#   bash run_cdc_pipeline.sh                # uses $HOME/.cdc-env
+#   bash run_cdc_pipeline.sh /path/to/env   # uses the path you pass
 #
 # Re-running is safe: every step is idempotent. The script will:
 #   1. install base packages (git, psql, docker, buildx, compose, uv)

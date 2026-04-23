@@ -40,7 +40,7 @@ fail()     { SECTION_RESULTS[$CUR_IDX]="FAIL"; SECTION_NOTES[$CUR_IDX]="$*"; pri
 
 # ────────────────────────────────────────────────────────────────────
 section "1. Environment (.env)"
-# run_phase1.sh keeps the source-of-truth env at $HOME/.cdc-env and copies
+# run_cdc_pipeline.sh keeps the source-of-truth env at $HOME/.cdc-env and copies
 # it into the repo as .env on each run. If the in-repo copy is missing
 # (fresh clone, git clean, etc.) fall back to $HOME/.cdc-env.
 ENV_CANDIDATES=( "$REPO_DIR/.env" "$HOME/.cdc-env" )

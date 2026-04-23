@@ -1,4 +1,4 @@
-# CDC Pipeline — Phase 1
+# CDC Pipeline — Phases 1 & 2
 
 A minimal, hand-built change-data-capture pipeline that streams cryptocurrency
 prices from the [CoinMarketCap](https://coinmarketcap.com/api/) API through
@@ -18,6 +18,7 @@ Confluent S3 Sink writes them out as one-minute-batched JSON.
 
 - [Why this exists](#why-this-exists)
 - [Quick start](#quick-start)
+- [Phase 2 — Terraform & Pydantic](#phase-2--terraform--pydantic)
 - [Manual setup (the learning path)](#manual-setup-the-learning-path)
 - [Key design decisions](#key-design-decisions)
 - [Verification](#verification)
@@ -30,13 +31,16 @@ Confluent S3 Sink writes them out as one-minute-batched JSON.
 
 ## Why this exists
 
-Phase 1 of a multi-phase project whose goal is to make modern CDC architectures
-concrete. The deliberate constraints:
+A multi-phase project whose goal is to make modern CDC architectures concrete.
+The deliberate constraints:
 
 - **One EC2 box** for everything (Kafka, Kafka Connect, ingestion script).
-- **Manual infra** through the AWS Console — no Terraform yet.
+- **AWS infra as code** via Terraform — a single module under `infra/terraform/`
+  (Phase 2 replaced the original Console clicking).
 - **Manual trigger** — the Python script is run on demand, not scheduled.
 - **Raw JSON out** — no schema registry, no Parquet, no Iceberg.
+- **Schema validation at the ingress boundary** via Pydantic — CMC responses
+  are parsed into typed models before anything touches Postgres.
 
 The point is not to ship a production pipeline; it is to make the flow
 (Postgres WAL → Debezium → Kafka → S3) visible and reason-about-able. Later
@@ -46,46 +50,151 @@ phases tighten what's intentionally loose here — see [Roadmap](#roadmap).
 
 ## Quick start
 
-For a fresh EC2 instance, one script bootstraps everything end-to-end:
+Two steps: (1) bring the AWS infra up with Terraform from your Mac, (2) SSH
+into the EC2 and run the bootstrap script.
+
+### 1. Stand up the AWS stack (on your Mac)
 
 ```bash
-# On EC2 (Amazon Linux 2023) with IAM instance profile attached:
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit: set my_ip_cidr (curl -s https://checkip.amazonaws.com; add /32)
+#       and db_master_password (≥12 chars, avoid /, @, ", spaces)
 
-# 1. Create an env file OUTSIDE the repo so it survives fresh clones.
-cat > ~/.cdc-env <<'EOF'
+terraform init
+terraform apply           # ~8–12 min; RDS dominates
+```
+
+Note the outputs — you'll need `ec2_public_ip`, `rds_endpoint`, and
+`s3_bucket`.
+
+### 2. Wire up `~/.cdc-env` and run the bootstrap
+
+```bash
+# On your Mac: create the env file with Terraform outputs and your secrets.
+cat > ~/.cdc-env <<EOF
 CMC_API_KEY=your_cmc_key
-PG_HOST=your-instance.xxxx.us-east-1.rds.amazonaws.com
+PG_HOST=$(terraform -chdir=infra/terraform output -raw rds_endpoint)
 PG_PORT=5432
 PG_DATABASE=cdc
 PG_USER=postgres
-PG_PASSWORD=your_master_password
-DEBEZIUM_PG_PASSWORD=choose_a_strong_password
-S3_BUCKET=cdc-pipeline-events-<suffix>
+PG_PASSWORD=the-db-master-password-from-tfvars
+DEBEZIUM_PG_PASSWORD=choose-another-strong-password
+S3_BUCKET=$(terraform -chdir=infra/terraform output -raw s3_bucket)
 AWS_REGION=us-east-1
 EOF
 chmod 600 ~/.cdc-env
 
-# 2. Run the bootstrap.
-curl -fsSL https://raw.githubusercontent.com/<you>/cdc-pipeline/main/scripts/run_phase1.sh -o ~/run_phase1.sh
-bash ~/run_phase1.sh
+# SCP it to EC2, then run the bootstrap.
+EC2_IP=$(terraform -chdir=infra/terraform output -raw ec2_public_ip)
+scp -i ~/.ssh/cdc-pipeline.pem ~/.cdc-env ec2-user@$EC2_IP:~/.cdc-env
+ssh -i ~/.ssh/cdc-pipeline.pem ec2-user@$EC2_IP
+
+# Then on the EC2:
+curl -fsSL https://raw.githubusercontent.com/<you>/cdc-pipeline/main/scripts/run_cdc_pipeline.sh -o ~/run_cdc_pipeline.sh
+bash ~/run_cdc_pipeline.sh
 ```
 
-[`scripts/run_phase1.sh`](./scripts/run_phase1.sh) is idempotent. It installs
-packages, configures 1 GB of swap, clones the repo, creates the Debezium
-Postgres role, applies migrations, brings Kafka + Connect up under Docker
-Compose, registers both connectors, runs the ingestion once, and waits up
-to 2 minutes for the first S3 objects to appear.
+[`scripts/run_cdc_pipeline.sh`](./scripts/run_cdc_pipeline.sh) is idempotent.
+It installs packages, configures 1 GB of swap, clones the repo, creates the
+Debezium Postgres role, applies migrations, brings Kafka + Connect up under
+Docker Compose, registers both connectors, runs the ingestion once, and
+waits up to 2 minutes for the first S3 objects to appear.
 
-Prerequisites it assumes you've already done manually in the Console:
-RDS + S3 + IAM role + EC2 + security groups exist. Those steps are in the
-[next section](#manual-setup-the-learning-path).
+To trigger another ingestion batch later without re-running the bootstrap:
+
+```bash
+# On the EC2
+cd ~/cdc_pipeline && uv run python -m cdc_pipeline.main
+```
+
+To tear everything down: `terraform destroy` from `infra/terraform/` on your
+Mac. More detail in [Teardown & cost notes](#teardown--cost-notes).
+
+For the full picture of what Terraform codifies and how Pydantic plugs in,
+see [Phase 2 — Terraform & Pydantic](#phase-2--terraform--pydantic). The
+original [manual Console walkthrough](#manual-setup-the-learning-path) is
+kept intact further down as reference.
+
+---
+
+## Phase 2 — Terraform & Pydantic
+
+Phase 2 is deliberately lighter than Phase 1: it replaces the AWS Console
+clicking with infrastructure-as-code and tightens the data contract with
+CMC by validating every response against a Pydantic schema.
+
+### Terraform: one command up, one command down
+
+Everything Phase 1 set up by hand (default-VPC SGs, RDS Postgres with the
+logical-replication parameter group, S3 bucket, IAM role + instance profile,
+EC2 with key pair) is codified in `infra/terraform/`. State is local and
+gitignored — fine for solo work on one laptop.
+
+```bash
+# One-time on your Mac
+brew install terraform
+
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set my_ip_cidr and db_master_password.
+# (Find your IP with: curl -s https://checkip.amazonaws.com)
+
+terraform init
+terraform apply          # stands up RDS, EC2, S3, SGs, IAM
+```
+
+The apply prints the EC2 IP, RDS endpoint, and S3 bucket name. Copy those
+into `~/.cdc-env` on your Mac, `scp` it (or recreate it) on the EC2, then
+run `run_cdc_pipeline.sh` as before.
+
+```bash
+terraform destroy        # tears everything down in the right order
+```
+
+**What lives where:**
+
+```
+infra/terraform/
+├── providers.tf      AWS + random providers, default tags
+├── variables.tf      region, instance sizes, my_ip, db creds, key path
+├── network.tf        default VPC data sources + EC2/RDS security groups
+├── ec2.tf            AMI lookup, key pair, IAM role/profile, instance
+├── rds.tf            parameter group, subnet group, Postgres 16 instance
+├── s3.tf             events bucket (force_destroy on for clean teardown)
+├── outputs.tf        EC2 IP, RDS endpoint, bucket name, SSH command hint
+└── terraform.tfvars.example   template for local tfvars (gitignored)
+```
+
+**Notes:**
+
+- Key pair: the config reads `~/.ssh/cdc-pipeline.pub` by default (the
+  public half of the `cdc-pipeline.pem` that AWS originally issued). If
+  you don't have it yet, extract once:
+  `ssh-keygen -y -f ~/.ssh/cdc-pipeline.pem > ~/.ssh/cdc-pipeline.pub`.
+- The S3 bucket uses `force_destroy = true` so teardown works even if
+  objects remain. Fine for learning; remove it for anything real.
+- RDS is single-AZ, `backup_retention_period = 0`, `skip_final_snapshot = true`
+  — stays inside the free tier and avoids leftover snapshots after destroy.
+- Terraform runs **on your Mac**, not on the EC2. State lives at
+  `infra/terraform/terraform.tfstate` (gitignored along with `terraform.tfvars`).
+
+### Pydantic: validating the CMC response
+
+The Python ingestion layer now parses every CMC listings response through
+a Pydantic model (`src/cdc_pipeline/models.py`) before touching Postgres.
+If CMC renames a field or sends an unexpected type, `fetch_listings` fails
+fast with a `ValidationError` — no silent bad data in the pipeline.
+
+This is validation at the trust boundary only; the internal dict shape
+between `_normalize` and `upsert_coins` is unchanged.
 
 ---
 
 ## Manual setup (the learning path)
 
 Steps 1–4 below (S3, RDS, IAM role, EC2) are the AWS Console prerequisites
-— `run_phase1.sh` assumes they already exist. Steps 5–10 (on-EC2 setup,
+— `run_cdc_pipeline.sh` assumes they already exist. Steps 5–10 (on-EC2 setup,
 role creation, migrations, Kafka/Connect, connectors, ingestion) are what
 the script automates; the manual walk-through is included so each piece
 is visible end-to-end.
@@ -402,7 +511,20 @@ you exceed the 20 GB free tier, so keep it tidy.
 
 ### Full teardown
 
-Before deleting RDS:
+If you're using Terraform (Phase 2), destroy everything in dependency order
+with one command from your Mac:
+
+```bash
+cd infra/terraform
+terraform destroy
+```
+
+The S3 bucket has `force_destroy = true`, so it's wiped along with its
+objects. RDS is configured with `skip_final_snapshot = true` to avoid
+leftover snapshots. The replication slot goes with the database.
+
+If you set things up through the Console instead, drop the replication slot
+first so it doesn't hold WAL on the way out:
 
 ```sql
 SELECT pg_drop_replication_slot('debezium_slot');
@@ -421,20 +543,22 @@ cdc_pipeline/
 │   ├── cmc_client.py              CMC API client with bounded retries
 │   ├── config.py                  Env-driven settings (frozen dataclass)
 │   ├── db.py                      psycopg3 pool + upsert
-│   └── main.py                    CLI entrypoint
+│   ├── main.py                    CLI entrypoint
+│   └── models.py                  Pydantic models for the CMC response (Phase 2)
 ├── sql/
 │   ├── 001_create_cryptocurrencies.sql    Table + indexes + REPLICA IDENTITY
 │   └── 002_setup_cdc.sql                  Publication + grants for debezium role
 ├── scripts/
 │   ├── apply_migrations.py        Primitive SQL runner with a ledger table
-│   ├── run_phase1.sh              One-shot bootstrap on a fresh EC2
+│   ├── run_cdc_pipeline.sh              One-shot bootstrap on a fresh EC2
 │   └── diagnose.sh                13-section pipeline health check
 ├── infra/
 │   ├── docker-compose.yml         Kafka (KRaft, single broker) + Connect
 │   ├── Dockerfile.connect         Debezium Connect + Confluent S3 Sink plugin
-│   └── connectors/
-│       ├── postgres-source.json   Debezium source connector config
-│       └── s3-sink.json           Confluent S3 sink connector config
+│   ├── connectors/
+│   │   ├── postgres-source.json   Debezium source connector config
+│   │   └── s3-sink.json           Confluent S3 sink connector config
+│   └── terraform/                 Phase 2: AWS infra as code
 ├── .env.example                 Required env vars, no secrets
 └── pyproject.toml               uv-managed Python project
 ```
@@ -443,10 +567,9 @@ cdc_pipeline/
 
 ## Roadmap
 
-- **Phase 1 (this repo)** — manual infra, CDC flow end-to-end, raw JSON in S3.
-- **Phase 2** — Terraform for all infra (`terraform apply` stands it up,
-  `terraform destroy` tears it down) **and** schema validation on the CDC
-  stream (schema registry + Avro/JSON Schema contracts) so downstream
-  consumers can't be broken by silent column changes.
+- **Phase 1** — manual infra, CDC flow end-to-end, raw JSON in S3.
+- **Phase 2 (done)** — Terraform for all AWS infra (`terraform apply` stands
+  it up, `terraform destroy` tears it down) and Pydantic validation of the
+  CoinMarketCap response at the ingress boundary.
 - **Phase 3** — land S3 data as an open table format (Delta Lake or Iceberg)
   so the bucket becomes directly queryable from Spark / DuckDB / Athena.
